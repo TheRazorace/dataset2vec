@@ -6,7 +6,7 @@ This package aims to implement the approach proposed in *Dataset2Vec: Learning D
 ## Installation
 To install the package run the following command (you need Python 3.9 or higher):
 ```
-pip install dataset2vec
+pip install -e .
 ```
 
 ## Usage
