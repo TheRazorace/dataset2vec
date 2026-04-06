@@ -6,3 +6,5 @@ dataset2vec.egg-info
 dist
 GEMINI.md
 .DS_Store
+collections/
+.pytest_cache/
