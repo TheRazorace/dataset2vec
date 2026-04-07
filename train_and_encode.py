@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from pathlib import Path
+import os
 
 import numpy as np
 import pandas as pd
@@ -91,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-size",
         type=int,
-        default=256,
+        default=32,
         help="Dimensionality of the latent representation.",
     )
     parser.add_argument(
@@ -220,6 +220,7 @@ def train_model(
     max_epochs: int,
     patience: int,
     output_dir: Path,
+    samples: int,
 ) -> Dataset2Vec:
     """Train the Dataset2Vec model with early stopping and checkpointing.
 
@@ -238,7 +239,7 @@ def train_model(
     accelerator = detect_accelerator()
 
     checkpoint_callback = ModelCheckpoint(
-        dirpath=output_dir / "checkpoints",
+        dirpath=output_dir / f"checkpoints/{samples}-samples/",
         filename="{epoch}-{val_accuracy:.2f}-{train_accuracy:.2f}",
         save_top_k=1,
         monitor="val_accuracy",
@@ -456,6 +457,7 @@ def main() -> None:
         max_epochs=args.max_epochs,
         patience=args.patience,
         output_dir=output_dir,
+        samples = args.n_train
     )
 
     # Encode test set
@@ -464,7 +466,8 @@ def main() -> None:
     )
 
     # Save results
-    output_path = output_dir / f"{args.collection}_d2v_representations.csv"
+    os.makedirs(output_dir / f"{args.collection}/metafeatures", exist_ok=True)
+    output_path = output_dir / f"{args.collection}/metafeatures/{args.n_train}-samples-d2v.csv"
     result_df.to_csv(output_path, index=False)
     logger.info("Saved representations to %s", output_path)
     logger.info("Shape: %s", result_df.shape)
