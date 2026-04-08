@@ -99,6 +99,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip training and directly load checkpoint for encoding.",
     )
+    parser.add_argument(
+        "--debugging-run",
+        action="store_true",
+        help="Run a local debugging training and encoding process.",
+    )
 
     return parser.parse_args()
 
@@ -386,7 +391,10 @@ def main() -> None:
     torch.manual_seed(args.seed)
 
     # Paths
-    base_path=Path("")
+    if args.debugging_run:
+            base_path=Path("")
+    else:
+        base_path=Path("/apollo/users/ida/dataset2vec")
     collection_dir = base_path / "data/collections" / args.collection
     train_dir = collection_dir / "train_set"
     val_dir = collection_dir / "val_set"
