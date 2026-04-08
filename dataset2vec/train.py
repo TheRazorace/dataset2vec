@@ -59,6 +59,7 @@ class LightningBase(pl.LightningModule, ABC):
             emb1 = self.forward(X1.to(self.device), y1.to(self.device))
             emb2 = self.forward(X2.to(self.device), y2.to(self.device))
             sim = torch.exp(-self.gamma * torch.norm(emb1 - emb2))
+            sim = torch.clamp(sim, min=1e-7, max=1.0 - 1e-7)
             
             # calculate loss fraction matching original mean scaling
             if label == 1:

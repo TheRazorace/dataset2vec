@@ -188,8 +188,10 @@ class Dataset2Vec(LightningBase):
         same_datasets = torch.where(labels == 1)[0]
         different_datasets = torch.where(labels == 0)[0]
         
-        loss_same = torch.log(similarities[same_datasets]).mean() if len(same_datasets) > 0 else torch.tensor(0.0, device=labels.device)
-        loss_diff = torch.log(1 - similarities[different_datasets]).mean() if len(different_datasets) > 0 else torch.tensor(0.0, device=labels.device)
+        sim_clipped = torch.clamp(similarities, min=1e-7, max=1.0 - 1e-7)
+        
+        loss_same = torch.log(sim_clipped[same_datasets]).mean() if len(same_datasets) > 0 else torch.tensor(0.0, device=labels.device)
+        loss_diff = torch.log(1 - sim_clipped[different_datasets]).mean() if len(different_datasets) > 0 else torch.tensor(0.0, device=labels.device)
         
         return -(loss_same + loss_diff)
 
