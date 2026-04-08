@@ -223,25 +223,24 @@ def test_on_train_batch_end(
 
 
 @patch("dataset2vec.train.LightningBase.log")
-@patch(__name__ + ".DummyLightningBaseSubclass.calculate_loss")
 def test_training_step(
-    calculate_loss_mock: Mock,
     log_mock: Mock,
     sample_batch: list[tuple[Tensor, Tensor, Tensor, Tensor, int]],
-    sample_labels_similarities: Tensor,
+    sample_labels_similarities: tuple[Tensor, Tensor],
     sample_loss: Tensor,
 ) -> None:
     # Given
     model = DummyLightningBaseSubclass()
+    model.optimizers = Mock()
+    model.manual_backward = Mock()
     _, similarities = sample_labels_similarities
-    calculate_loss_mock.return_value = sample_loss
 
     # When
     step_outputs = model.training_step(sample_batch)
 
     # Then
     log_mock.assert_called_once_with(
-        "train_step_loss", sample_loss, prog_bar=True, batch_size=2
+        "train_step_loss", pytest.approx(sample_loss.item(), rel=1e-4), prog_bar=True, batch_size=2
     )
     assert len(step_outputs) == 2
     assert torch.isclose(step_outputs["loss"], sample_loss).all()

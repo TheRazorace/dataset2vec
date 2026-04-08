@@ -30,6 +30,7 @@ class LightningBase(pl.LightningModule, ABC):
         self.optimizer_cls = optimizer_config.optimizer_cls
         self.learning_rate = optimizer_config.learning_rate
         self.weight_decay = optimizer_config.weight_decay
+        self.automatic_optimization = False
 
         self.save_hyperparameters()
 
@@ -44,12 +45,38 @@ class LightningBase(pl.LightningModule, ABC):
     def training_step(
         self, batch: list[tuple[Tensor, Tensor, Tensor, Tensor, int]]
     ) -> Mapping[str, Tensor]:
-        labels, similarities = self.extract_labels_and_similarities_from_batch(
-            batch
-        )
-        loss = self.calculate_loss(labels, similarities)
-        self.log("train_step_loss", loss, prog_bar=True, batch_size=len(batch))
-        return {"loss": loss, "predictions": similarities}
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        sim_list = []
+        labels_list = [label for _, _, _, _, label in batch]
+        n_pos = sum(1 for lbl in labels_list if lbl == 1)
+        n_neg = sum(1 for lbl in labels_list if lbl == 0)
+
+        loss_total = 0.0
+
+        for X1, y1, X2, y2, label in batch:
+            emb1 = self.forward(X1.to(self.device), y1.to(self.device))
+            emb2 = self.forward(X2.to(self.device), y2.to(self.device))
+            sim = torch.exp(-self.gamma * torch.norm(emb1 - emb2))
+            
+            # calculate loss fraction matching original mean scaling
+            if label == 1:
+                loss_pair = -torch.log(sim) / n_pos if n_pos > 0 else torch.tensor(0.0, device=self.device)
+            else:
+                loss_pair = -torch.log(1 - sim) / n_neg if n_neg > 0 else torch.tensor(0.0, device=self.device)
+                
+            self.manual_backward(loss_pair)
+            loss_total += loss_pair.item()
+            
+            sim_list.append(sim.detach())
+
+        self.clip_gradients(opt, gradient_clip_val=1.0, gradient_clip_algorithm="norm")
+        opt.step()
+
+        similarities = torch.stack(sim_list)
+        self.log("train_step_loss", loss_total, prog_bar=True, batch_size=len(batch))
+        return {"loss": torch.tensor(loss_total, device=self.device), "predictions": similarities}
 
     def on_train_batch_end(
         self,
@@ -140,13 +167,13 @@ class LightningBase(pl.LightningModule, ABC):
         similarities = []
         labels = []
         for X1, y1, X2, y2, label in batch:
-            emb1 = self.forward(X1, y1)
-            emb2 = self.forward(X2, y2)
+            emb1 = self.forward(X1.to(self.device), y1.to(self.device))
+            emb2 = self.forward(X2.to(self.device), y2.to(self.device))
             similarities.append(
                 torch.exp(-self.gamma * torch.norm(emb1 - emb2))
             )
             labels.append(label)
-        return torch.Tensor(labels), torch.stack(similarities)
+        return torch.Tensor(labels).to(self.device), torch.stack(similarities)
 
     def configure_optimizers(
         self,

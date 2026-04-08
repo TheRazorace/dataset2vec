@@ -50,8 +50,6 @@ trainer = Trainer(
             every_n_epochs=1,
         ),
     ],
-    gradient_clip_algorithm="norm",
-    gradient_clip_val=1.0,
 )
 
 trainer.fit(model, train_loader, val_loader)

@@ -66,6 +66,7 @@ class DataUtils:
     @staticmethod
     def sample_random_subset(
         a: int | NDArray[np.generic],
+        max_samples: int | None = None,
     ) -> NDArray[np.generic]:
         """
         Samples random subset with variable length of the given array. When int
@@ -75,6 +76,8 @@ class DataUtils:
         Args:
             a (int | NDArray[np.generic]): Array to sample from.
                 When int is passed the samples from the range [0, a - 1].
+            max_samples (int | None): Optional ceiling on the maximum number
+                of items included. Subsetting will not exceed this.
 
         Returns:
             NDArray[np.generic]: Subsample of the input array.
@@ -86,8 +89,15 @@ class DataUtils:
             return a
         subset_idx = np.random.uniform(size=len(a)) < 0.5
         if np.sum(subset_idx) == 0:
-            return a
-        return a[subset_idx]
+            subset_idx[np.random.choice(len(a))] = True  # Fallback to at least 1 unconditionally
+            
+        sampled = a[subset_idx]
+        
+        # Ceil the sampled elements if a limit is mandated
+        if max_samples is not None and len(sampled) > max_samples:
+            sampled = np.random.choice(sampled, max_samples, replace=False)
+            
+        return sampled
 
     @staticmethod
     def index_tensor_using_lists(

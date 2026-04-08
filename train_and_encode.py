@@ -67,13 +67,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-epochs",
         type=int,
-        default=100_000,
+        default=1000,
         help="Maximum number of training epochs.",
     )
     parser.add_argument(
         "--patience",
         type=int,
-        default=50,
+        default=10,
         help="Early stopping patience (epochs without val_accuracy improvement).",
     )
     parser.add_argument(
@@ -85,7 +85,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--n-batches",
         type=int,
-        default=32,
+        default=16,
         help="Number of batches per epoch for the loaders.",
     )
     parser.add_argument(
@@ -95,14 +95,11 @@ def parse_args() -> argparse.Namespace:
         help="Dimensionality of the latent representation.",
     )
     parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=None,
-        help=(
-            "Directory to save outputs. "
-            "Defaults to data/collections/<collection>/."
-        ),
+        "--encode-only",
+        action="store_true",
+        help="Skip training and directly load checkpoint for encoding.",
     )
+
     return parser.parse_args()
 
 
@@ -259,8 +256,6 @@ def train_model(
             ),
             checkpoint_callback,
         ],
-        gradient_clip_algorithm="norm",
-        gradient_clip_val=1.0,
     )
 
     logger.info("Starting training...")
@@ -305,6 +300,9 @@ def encode_dataset(
                 len(df),
             )
             return None
+            
+        if len(df) > 1000:
+            df = df.sample(n=1000, random_state=42)
 
         x_df = df.iloc[:, :-1]
         y_series = df.iloc[:, -1]
@@ -388,77 +386,86 @@ def main() -> None:
     torch.manual_seed(args.seed)
 
     # Paths
-    collection_dir = Path("data/collections") / args.collection
+    base_path=Path("")
+    collection_dir = base_path / "data/collections" / args.collection
     train_dir = collection_dir / "train_set"
     val_dir = collection_dir / "val_set"
     test_dir = collection_dir / "test_set"
-    output_dir = (
-        Path(args.output_dir)
-        if args.output_dir
-        else collection_dir
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = collection_dir / "metafeatures"
+    os.makedirs(output_dir, exist_ok=True)
+
 
     logger.info("Collection: %s", args.collection)
-    logger.info("Output directory: %s", output_dir)
+    logger.info("Output directory: %s", collection_dir)
 
-    # Discover datasets
-    train_csvs = discover_csv_files(train_dir)
-    val_csvs = discover_csv_files(val_dir)
     test_csvs = discover_csv_files(test_dir)
-    logger.info(
-        "Found %d train, %d val, %d test datasets.",
-        len(train_csvs),
-        len(val_csvs),
-        len(test_csvs),
-    )
 
-    # Sample N training datasets
-    sampled_train = sample_training_datasets(
-        train_csvs, args.n_train, rng
-    )
-    logger.info(
-        "Using %d training datasets: %s",
-        len(sampled_train),
-        [p.stem for p in sampled_train],
-    )
+    if args.encode_only:
+        logger.info("Encode-only mode enabled. Skipping training.")
+        checkpoint_dir = collection_dir / f"checkpoints/{args.n_train}-samples/"
+        checkpoints = list(checkpoint_dir.glob("*.ckpt"))
+        if not checkpoints:
+            raise FileNotFoundError(f"No checkpoint found in {checkpoint_dir}")
+        checkpoint_path = checkpoints[0]
+        logger.info("Loading checkpoint for encoding: %s", checkpoint_path)
+        trained_model = Dataset2Vec.load_from_checkpoint(checkpoint_path)
+    else:
+        # Discover datasets
+        train_csvs = discover_csv_files(train_dir)
+        val_csvs = discover_csv_files(val_dir)
+        logger.info(
+            "Found %d train, %d val, %d test datasets.",
+            len(train_csvs),
+            len(val_csvs),
+            len(test_csvs),
+        )
 
-    def load_and_preprocess_csv(paths: list[Path]) -> list[pd.DataFrame]:
-        dfs = []
-        for p in paths:
-            df = pd.read_csv(p)
-            # Factorize the target column (last column) to ensure it's numeric
-            target_col = df.columns[-1]
-            df[target_col] = pd.factorize(df[target_col])[0]
-            dfs.append(df)
-        return dfs
+        # Sample N training datasets
+        sampled_train = sample_training_datasets(
+            train_csvs, args.n_train, rng
+        )
+        logger.info(
+            "Using %d training datasets: %s",
+            len(sampled_train),
+            [p.stem for p in sampled_train],
+        )
 
-    train_dfs = load_and_preprocess_csv(sampled_train)
-    val_dfs = load_and_preprocess_csv(val_csvs)
+        def load_and_preprocess_csv(paths: list[Path]) -> list[pd.DataFrame]:
+            dfs = []
+            for p in paths:
+                df = pd.read_csv(p)
+                # Factorize the target column (last column) to ensure it's numeric
+                target_col = df.columns[-1]
+                df[target_col] = pd.factorize(df[target_col])[0]
+                dfs.append(df)
+            return dfs
 
-    # Build data loaders
-    train_loader = Dataset2VecLoader(
-        train_dfs,
-        batch_size=args.batch_size,
-        n_batches=args.n_batches,
-    )
-    val_loader = RepeatableDataset2VecLoader(
-        val_dfs,
-        batch_size=args.batch_size,
-        n_batches=args.n_batches,
-    )
+        train_dfs = load_and_preprocess_csv(sampled_train)
+        val_dfs = load_and_preprocess_csv(val_csvs)
 
-    # Build and train model
-    model = build_model(args.output_size)
-    trained_model = train_model(
-        model,
-        train_loader,
-        val_loader,
-        max_epochs=args.max_epochs,
-        patience=args.patience,
-        output_dir=output_dir,
-        samples = args.n_train
-    )
+        # Build data loaders
+        train_loader = Dataset2VecLoader(
+            train_dfs,
+            batch_size=args.batch_size,
+            n_batches=args.n_batches,
+        )
+        val_loader = RepeatableDataset2VecLoader(
+            val_dfs,
+            batch_size=args.batch_size,
+            n_batches=args.n_batches,
+        )
+
+        # Build and train model
+        model = build_model(args.output_size)
+        trained_model = train_model(
+            model,
+            train_loader,
+            val_loader,
+            max_epochs=args.max_epochs,
+            patience=args.patience,
+            output_dir=collection_dir,
+            samples=args.n_train
+        )
 
     # Encode test set
     result_df = encode_test_set(
@@ -466,8 +473,7 @@ def main() -> None:
     )
 
     # Save results
-    os.makedirs(output_dir / f"{args.collection}/metafeatures", exist_ok=True)
-    output_path = output_dir / f"{args.collection}/metafeatures/{args.n_train}-samples-d2v.csv"
+    output_path = output_dir / f"dataset2vec-{args.n_train}-samples.csv"
     result_df.to_csv(output_path, index=False)
     logger.info("Saved representations to %s", output_path)
     logger.info("Shape: %s", result_df.shape)

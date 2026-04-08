@@ -210,7 +210,7 @@ class Dataset2VecLoader:
         q = np.random.choice(np.arange(3, max_q + 1))
         n_rows_to_select = 2**q
         rows_idx = np.random.choice(n_rows, n_rows_to_select)
-        features_idx = DataUtils.sample_random_subset(n_features)
+        features_idx = DataUtils.sample_random_subset(n_features, max_samples=128)
         targets_idx = DataUtils.sample_random_subset(n_targets)
 
         return rows_idx, features_idx, targets_idx
