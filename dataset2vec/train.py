@@ -121,6 +121,7 @@ class LightningBase(pl.LightningModule, ABC):
         )
         loss = self.calculate_loss(labels, similarities)
 
+        self.log("val_step_loss", loss, prog_bar=True, batch_size=len(batch))
         return {"loss": loss, "predictions": similarities}
 
     def on_validation_batch_end(
@@ -151,10 +152,12 @@ class LightningBase(pl.LightningModule, ABC):
             )
             .type(torch.float32)
             .mean(),
+            prog_bar=True,
         )
         self.log(
             "val_loss",
             self.calculate_loss(validation_labels, validation_predictions),
+            prog_bar=True,
         )
 
     @abstractmethod
