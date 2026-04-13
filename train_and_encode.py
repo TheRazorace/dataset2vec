@@ -441,7 +441,7 @@ def main() -> None:
         def load_and_preprocess_csv(paths: list[Path]) -> list[pd.DataFrame]:
             dfs = []
             for p in paths:
-                df = pd.read_csv(p)
+                df = pd.read_csv(p, low_memory=False)
                 # Factorize the target column (last column) to ensure it's numeric
                 target_col = df.columns[-1]
                 df[target_col] = pd.factorize(df[target_col])[0]
