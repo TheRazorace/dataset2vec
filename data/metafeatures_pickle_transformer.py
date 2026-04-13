@@ -61,7 +61,7 @@ def transform_metafeatures(collection_name: str) -> None:
     for csv_file in metafeatures_dir.glob("*.csv"):
         print(f"Processing {csv_file.name}...")
         metafeatures_dict = process_csv_to_dict(csv_file)
-        pickle_path = pickle_dir / f"{csv_file.stem}.pkl"
+        pickle_path = pickle_dir / f"metafeatures_{csv_file.stem}.pkl"
 
         with open(pickle_path, mode="wb") as pkl_file:
             pickle.dump(metafeatures_dict, pkl_file)
