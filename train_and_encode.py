@@ -396,7 +396,7 @@ def main() -> None:
     else:
         base_path=Path("/apollo/users/ida/dataset2vec")
     collection_dir = base_path / "data/collections" / args.collection
-    train_dir = collection_dir / "train_set"
+    train_dir = collection_dir / "test_set"
     val_dir = collection_dir / "val_set"
     test_dir = collection_dir / "test_set"
     output_dir = collection_dir / "metafeatures"
